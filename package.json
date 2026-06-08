@@ -6,7 +6,8 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "test": "bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "build:viewer": "cd viewer-app && bun install && bun run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
