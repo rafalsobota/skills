@@ -31,6 +31,7 @@ const SOCK = Bun.env.SEDNO_SOCK;
 if (!SOCK) {
   console.error("[sedno-viewer] missing SEDNO_SOCK; quitting");
   Utils.quit();
+  throw new Error("missing SEDNO_SOCK");
 }
 
 let client: Socket<unknown> | null = null;
@@ -62,10 +63,15 @@ const win = new BrowserWindow({
 
 Utils.setDockIconVisible(false); // accessory: NSApplicationActivationPolicyAccessory, no Dock icon
 
+let lastActivatedVersionId: string | null = null;
 function handleFromServer(msg: ViewerOutbound): void {
   if (msg.type === "render") {
     win.webview.rpc?.send.render({ version: msg.version, svg: msg.svg, history: msg.history });
-    win.activate(); // front ONLY on a new diagram
+    // Front ONLY on a genuinely new diagram — suppress the hello-triggered re-render of the current version.
+    if (msg.version.id !== lastActivatedVersionId) {
+      lastActivatedVersionId = msg.version.id;
+      win.activate();
+    }
   } else if (msg.type === "show") {
     win.webview.rpc?.send.show({ version: msg.version, svg: msg.svg });
   } else if (msg.type === "reload") {
@@ -78,7 +84,7 @@ const decode = createFrameDecoder<ViewerOutbound>();
 async function connectWithWatchdog(attempt = 0): Promise<void> {
   try {
     client = await Bun.connect({
-      unix: SOCK!,
+      unix: SOCK,
       socket: {
         open(socket) { client = socket; sendToServer({ type: "hello" }); },
         data(_socket, data) { for (const m of decode(data.toString())) handleFromServer(m); },
