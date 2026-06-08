@@ -30,3 +30,11 @@ test("decoder skips blank lines and malformed JSON without throwing", () => {
   const msgs = decode("\n{bad json}\n" + encodeFrame({ type: "hello" }));
   expect(msgs).toEqual([{ type: "hello" }]);
 });
+
+test("decoder reassembles a multibyte char split across byte chunks", () => {
+  const decode = createFrameDecoder<{ type: string; text: string }>();
+  const bytes = new TextEncoder().encode(encodeFrame({ type: "x", text: "ąćż🔍" } as any));
+  const cut = bytes.length - 2; // split inside the 4-byte 🔍
+  expect(decode(bytes.subarray(0, cut))).toEqual([]);
+  expect(decode(bytes.subarray(cut))).toEqual([{ type: "x", text: "ąćż🔍" }]);
+});

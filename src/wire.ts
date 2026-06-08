@@ -6,11 +6,14 @@ export function encodeFrame(msg: ViewerOutbound | ViewerInbound): string {
   return JSON.stringify(msg) + "\n";
 }
 
-// Stateful decoder over a byte/string stream that may split or coalesce frames.
-export function createFrameDecoder<T = unknown>(): (chunk: string) => T[] {
+// Accepts raw socket bytes (Uint8Array) and decodes with a STREAMING UTF-8 decoder,
+// so a multibyte character split across socket reads is reassembled correctly.
+// Also accepts strings (already-decoded input, e.g. tests).
+export function createFrameDecoder<T = unknown>(): (chunk: Uint8Array | string) => T[] {
+  const decoder = new TextDecoder();
   let buf = "";
-  return (chunk: string): T[] => {
-    buf += chunk;
+  return (chunk: Uint8Array | string): T[] => {
+    buf += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
     const out: T[] = [];
     let nl: number;
     while ((nl = buf.indexOf("\n")) >= 0) {

@@ -20,7 +20,7 @@ export class UnixSocketBridge implements BridgeLike {
   private client: { write(data: string): number } | null = null;
   private child: Subprocess | null = null;
   // Fresh per connection: a stale partial frame from a dead client must never prefix the next one.
-  private decode: (chunk: string) => ViewerInbound[] = createFrameDecoder<ViewerInbound>();
+  private decode: (chunk: Uint8Array | string) => ViewerInbound[] = createFrameDecoder<ViewerInbound>();
   private readonly dir: string;
   readonly sockPath: string;
 
@@ -39,7 +39,7 @@ export class UnixSocketBridge implements BridgeLike {
       unix: this.sockPath,
       socket: {
         open(socket) { self.client = socket; self.decode = createFrameDecoder<ViewerInbound>(); },
-        data(_socket, data) { for (const msg of self.decode(data.toString())) self.dispatch(msg); },
+        data(_socket, data) { for (const msg of self.decode(data)) self.dispatch(msg); },
         close() { self.client = null; },
       },
     });

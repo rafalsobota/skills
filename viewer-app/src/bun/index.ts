@@ -87,7 +87,7 @@ async function connectWithWatchdog(attempt = 0): Promise<void> {
       unix: SOCK,
       socket: {
         open(socket) { client = socket; sendToServer({ type: "hello" }); },
-        data(_socket, data) { for (const m of decode(data.toString())) handleFromServer(m); },
+        data(_socket, data) { for (const m of decode(data)) handleFromServer(m); },
         close() { Utils.quit(); }, // watchdog: server gone
         end() { Utils.quit(); },
         error() { Utils.quit(); },
