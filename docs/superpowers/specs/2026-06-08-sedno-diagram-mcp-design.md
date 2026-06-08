@@ -200,3 +200,25 @@ między sesjami** — historia jest in-memory na sesję; platformy poza macOS 14
   `notifications/claude/channel` (czytelność dla Claude vs zwięzłość).
 - Czy historia wersji ma limit (np. ostatnie N) czy pełna sesja.
 - Sposób zaznaczania obszaru (marquee → zbiór id) — szczegół UI Fazy 1.
+
+## 13. Model współbieżności
+
+stdio jest 1:1 — każda sesja Claude Code spawnuje **własny** podproces serwera. Stąd:
+
+- **Osobne sesje są w pełni izolowane:** N instancji `claude` = N niezależnych serwerów =
+  N efemerycznych portów WS = N osobnych okien, każde z własną historią i buforem. Zero
+  kolizji (po to `port: 0`). To naturalna i pożądana granica izolacji: jeden użytkownik =
+  jedna sesja = jedno okno.
+- **Subagenci w obrębie jednej sesji współdzielą jeden serwer:** dziedziczą narzędzia MCP
+  sesji-rodzica i nie startują własnych serwerów. Wszystkie ich wywołania idą przez ten sam
+  podproces → wspólne okno, historia i bufor. Brak awarii/korupcji (serwer jednowątkowy na
+  pętli zdarzeń; `stdout` czyste dzięki zasadzie zero `console.log`), ale **logicznie**
+  diagramy wielu subagentów przeplatają się w jednym oknie i jednej osi wersji.
+- **Brak tożsamości wywołującego:** MCP przekazuje serwerowi tylko `{ name, arguments }` —
+  żadnego id sesji ani subagenta. Serwer **nie może** sam rozdzielić subagentów na osobne
+  okna/tory.
+
+**Decyzja v1:** izolacja na granicy sesji (jak wyżej); współdzielenie wewnątrz sesji jest
+akceptowane jako „jedno okno na sesję". **Poza v1** (możliwe rozszerzenie): jawny argument
+`lane`/`agentId` w `render_diagram`, po którym serwer kluczowałby osobne okna/tory dla wielu
+równoległych agentów w jednej sesji.
