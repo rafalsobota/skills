@@ -34,9 +34,15 @@ async function main() {
   };
 
   const transport = new StdioServerTransport();
-  transport.onclose = () => shutdown("stdin-closed"); // Claude Code zamknął nasze stdin
+  transport.onclose = () => shutdown("transport-closed");
   await server.connect(transport);
   log("MCP server connected over stdio");
+
+  // Claude Code zamyka nasze stdin przy zakończeniu sesji. Pod Bun transport.onclose
+  // nie odpala się niezawodnie na EOF stdin, więc nasłuchujemy jawnie. Listenery 'end'/'close'
+  // są pasywne (nie konsumują bajtów), więc nie kolidują z czytaniem przez transport.
+  process.stdin.on("end", () => shutdown("stdin-end"));
+  process.stdin.on("close", () => shutdown("stdin-close"));
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
