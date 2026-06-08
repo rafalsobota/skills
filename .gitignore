@@ -1,0 +1,15 @@
+# deps
+node_modules/
+bun.lockb
+
+# build / dist
+dist/
+build/
+*.app/
+
+# brainstorming visual companion (local, ephemeral)
+.superpowers/
+
+# os / editor
+.DS_Store
+*.log
