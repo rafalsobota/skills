@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sedno": {
+      "command": "bun",
+      "args": ["run", "/Users/rafalsobota/Developer/sedno.sh/src/server.ts"]
+    }
+  }
+}
