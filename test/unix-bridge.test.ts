@@ -54,7 +54,7 @@ test("a real connecting client receives broadcasts and its frames fire the callb
   const decode = createFrameDecoder<ViewerOutbound>();
   const client = await Bun.connect({
     unix: bridge.sockPath,
-    socket: { data(_s, d) { for (const m of decode(d.toString())) received.push(m); } },
+    socket: { data(_s, d) { for (const m of decode(d)) received.push(m); } },
   });
 
   // client -> server
@@ -104,7 +104,7 @@ test("per-connection decoder reset: client A's partial frame does not corrupt cl
   await waitFor(() => true); // let the server register A's bytes
   a.end();
   // Wait for the server to observe A's close before B connects.
-  await waitFor(() => (bridge as any).client === null);
+  await waitFor(() => (bridge as any).connected === false);
 
   // Client B sends a complete frame; it must not be prefixed by A's leftover bytes.
   const b = await Bun.connect({ unix: bridge.sockPath, socket: { data() {} } });

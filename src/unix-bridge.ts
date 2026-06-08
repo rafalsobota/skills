@@ -20,7 +20,7 @@ export interface UnixSocketBridgeOptions {
 
 export class UnixSocketBridge implements BridgeLike {
   private listener: ReturnType<typeof Bun.listen> | null = null;
-  private client: { write(data: string): number } | null = null;
+  private connected = false;
   private writer: SocketWriter | null = null;
   private child: Subprocess | null = null;
   // Fresh per connection: a stale partial frame from a dead client must never prefix the next one.
@@ -42,10 +42,10 @@ export class UnixSocketBridge implements BridgeLike {
     this.listener = Bun.listen({
       unix: this.sockPath,
       socket: {
-        open(socket) { self.client = socket; self.writer = new SocketWriter(socket); self.decode = createFrameDecoder<ViewerInbound>(); },
+        open(socket) { self.connected = true; self.writer = new SocketWriter(socket); self.decode = createFrameDecoder<ViewerInbound>(); },
         data(_socket, data) { for (const msg of self.decode(data)) self.dispatch(msg); },
         drain(_socket) { self.writer?.drain(); },
-        close() { self.client = null; self.writer = null; },
+        close() { self.connected = false; self.writer = null; },
       },
     });
   }
