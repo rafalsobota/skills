@@ -88,7 +88,7 @@ const decode = createFrameDecoder<ViewerOutbound>();
 async function connectWithWatchdog(attempt = 0): Promise<void> {
   try {
     client = await Bun.connect({
-      unix: SOCK,
+      unix: SOCK!,
       socket: {
         open(socket) { client = socket; writer = new SocketWriter(socket); sendToServer({ type: "hello" }); },
         data(_socket, data) { for (const m of decode(data)) handleFromServer(m); },

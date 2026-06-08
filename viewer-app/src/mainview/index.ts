@@ -1,10 +1,7 @@
 // viewer-app/src/mainview/index.ts
 import Electrobun, { Electroview } from "electrobun/view";
 import type { SednoRPC } from "../bun/index";
-
-type VersionMeta = { id: string; title?: string; basedOn: string | null; createdAt: number };
-type CommentTarget = { kind: "element"; id: string } | { kind: "region"; ids: string[] } | { kind: "global" };
-type Comment = { versionId: string | null; target: CommentTarget; text: string };
+import type { VersionMeta, Comment, CommentTarget } from "../../../src/types";
 
 const stage = document.getElementById("stage")!;
 const timelineEl = document.getElementById("timeline")!;
