@@ -85,6 +85,31 @@ test("stop() unlinks the socket file", async () => {
 
 test("ensureViewer no-ops when launcherPath is null (server runs without a window)", () => {
   bridge = new UnixSocketBridge({ launcherPath: null });
-  bridge.broadcast({ type: "render", version: { id: "v1", basedOn: null, createdAt: 0 }, svg: "<svg/>", history: [] });
-  expect(true).toBe(true);
+  expect(() =>
+    bridge!.broadcast({ type: "render", version: { id: "v1", basedOn: null, createdAt: 0 }, svg: "<svg/>", history: [] }),
+  ).not.toThrow();
+});
+
+test("per-connection decoder reset: client A's partial frame does not corrupt client B", async () => {
+  const { spawn } = fakeSpawn();
+  bridge = new UnixSocketBridge({ launcherPath: "/fake/launcher", spawn });
+  await bridge.start();
+
+  let shown: string | null = null;
+  bridge.onRequestShow = (id) => { shown = id; };
+
+  // Client A writes a partial frame (no trailing newline), then disconnects.
+  const a = await Bun.connect({ unix: bridge.sockPath, socket: { data() {} } });
+  a.write('{"type":"hel');
+  await waitFor(() => true); // let the server register A's bytes
+  a.end();
+  // Wait for the server to observe A's close before B connects.
+  await waitFor(() => (bridge as any).client === null);
+
+  // Client B sends a complete frame; it must not be prefixed by A's leftover bytes.
+  const b = await Bun.connect({ unix: bridge.sockPath, socket: { data() {} } });
+  b.write(encodeFrame({ type: "request-show", id: "v9" }));
+  await waitFor(() => shown !== null);
+  expect(shown!).toBe("v9");
+  b.end();
 });

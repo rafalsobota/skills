@@ -19,6 +19,8 @@ export class UnixSocketBridge implements BridgeLike {
   private listener: ReturnType<typeof Bun.listen> | null = null;
   private client: { write(data: string): number } | null = null;
   private child: Subprocess | null = null;
+  // Fresh per connection: a stale partial frame from a dead client must never prefix the next one.
+  private decode: (chunk: string) => ViewerInbound[] = createFrameDecoder<ViewerInbound>();
   private readonly dir: string;
   readonly sockPath: string;
 
@@ -33,12 +35,11 @@ export class UnixSocketBridge implements BridgeLike {
 
   async start(): Promise<void> {
     const self = this;
-    const decode = createFrameDecoder<ViewerInbound>();
     this.listener = Bun.listen({
       unix: this.sockPath,
       socket: {
-        open(socket) { self.client = socket; },
-        data(_socket, data) { for (const msg of decode(data.toString())) self.dispatch(msg); },
+        open(socket) { self.client = socket; self.decode = createFrameDecoder<ViewerInbound>(); },
+        data(_socket, data) { for (const msg of self.decode(data.toString())) self.dispatch(msg); },
         close() { self.client = null; },
       },
     });
