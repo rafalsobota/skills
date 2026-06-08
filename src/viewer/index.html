@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>sedno — diagram</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #0f1117; color: #cdd3e0; height: 100vh; display: grid;
+    grid-template-columns: 1fr 240px; grid-template-rows: auto 1fr auto;
+    grid-template-areas: "head head" "stage side" "foot foot";
+  }
+  header { grid-area: head; padding: 10px 16px; border-bottom: 1px solid #232838;
+    display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 14px; margin: 0; font-weight: 700; color: #e6e9f0; }
+  header .ver { font-size: 12px; color: #7f8aa3; }
+  header .status { margin-left: auto; font-size: 11px; color: #f0a868; }
+  header .status.ok { color: #34d3a6; }
+  #stage { grid-area: stage; overflow: auto; padding: 20px; display: flex;
+    align-items: center; justify-content: center; }
+  #stage svg { max-width: 100%; height: auto; }
+  #stage [data-node-id], #stage [data-edge-id] { cursor: pointer; }
+  #stage [data-node-id]:hover, #stage [data-edge-id]:hover {
+    outline: 2px solid #4c8dff; outline-offset: 2px; filter: drop-shadow(0 0 3px #4c8dff); }
+  #stage [data-commented] { outline: 2px dashed #34d3a6 !important; outline-offset: 2px; }
+  aside { grid-area: side; border-left: 1px solid #232838; padding: 12px; overflow: auto; }
+  aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: #7f8aa3; margin: 0 0 8px; }
+  ul.timeline { list-style: none; margin: 0 0 16px; padding: 0; }
+  ul.timeline li { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    display: flex; gap: 6px; align-items: baseline; }
+  ul.timeline li:hover { background: #1a1f2e; }
+  ul.timeline li.current { background: #163a2e; color: #7fe9c8; }
+  ul.timeline li .based { color: #7f8aa3; font-size: 11px; margin-left: auto; }
+  footer { grid-area: foot; border-top: 1px solid #232838; padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px; }
+  footer .queue { font-size: 12px; color: #7f8aa3; }
+  button { font: inherit; cursor: pointer; border: 1px solid #2c3346; background: #1a1f2e;
+    color: #cdd3e0; border-radius: 8px; padding: 8px 12px; }
+  button.primary { background: #34d3a6; color: #06241b; border-color: #34d3a6; font-weight: 700; }
+  button:disabled { opacity: .5; cursor: default; }
+  #popover { position: fixed; z-index: 10; width: 280px; background: #161b27;
+    border: 1px solid #2c3346; border-radius: 10px; padding: 12px; display: none;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+  #popover.open { display: block; }
+  #popover .tgt { font-size: 11px; color: #7f8aa3; margin-bottom: 6px; }
+  #popover .chips { display: flex; gap: 6px; margin-bottom: 8px; }
+  #popover .chips button { padding: 4px 8px; font-size: 14px; }
+  #popover textarea { width: 100%; height: 64px; resize: vertical; background: #0f1117;
+    color: #cdd3e0; border: 1px solid #2c3346; border-radius: 6px; padding: 6px; font: inherit; }
+  #popover .row { display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end; }
+  .empty { color: #5b6580; font-size: 13px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>sedno</h1>
+    <span class="ver" id="curLabel">—</span>
+    <span class="status" id="status">łączenie…</span>
+  </header>
+  <main id="stage"><div class="empty">Czekam na pierwszy diagram…</div></main>
+  <aside>
+    <h2>Historia wersji</h2>
+    <ul class="timeline" id="timeline"></ul>
+    <button id="globalBtn">💬 Komentarz ogólny</button>
+  </aside>
+  <footer>
+    <span class="queue" id="queue">0 komentarzy w kolejce</span>
+    <button class="primary" id="sendBtn" disabled>Wyślij do Claude →</button>
+  </footer>
+
+  <div id="popover">
+    <div class="tgt" id="popTarget"></div>
+    <div class="chips">
+      <button data-emoji="🔍" title="pogłęb">🔍</button>
+      <button data-emoji="✗" title="błędne">✗</button>
+      <button data-emoji="✂️" title="uprość">✂️</button>
+      <button data-emoji="?" title="pytanie">?</button>
+    </div>
+    <textarea id="popText" placeholder="Twój komentarz…"></textarea>
+    <div class="row">
+      <button id="popCancel">Anuluj</button>
+      <button class="primary" id="popAdd">Dodaj</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  var WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+  var ws = null, reconnectTimer = null;
+  var currentVersionId = null;
+  var queue = [];          // Comment[]
+  var activeTarget = null; // {kind:'element',id} | {kind:'global'}
+
+  var stage = document.getElementById("stage");
+  var timelineEl = document.getElementById("timeline");
+  var statusEl = document.getElementById("status");
+  var curLabel = document.getElementById("curLabel");
+  var queueEl = document.getElementById("queue");
+  var sendBtn = document.getElementById("sendBtn");
+  var globalBtn = document.getElementById("globalBtn");
+  var popover = document.getElementById("popover");
+  var popTarget = document.getElementById("popTarget");
+  var popText = document.getElementById("popText");
+
+  function clearChildren(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function emptyMsg(text) {
+    var d = document.createElement("div"); d.className = "empty"; d.textContent = text; return d;
+  }
+
+  function connect() {
+    clearTimeout(reconnectTimer);
+    try { ws = new WebSocket(WS_URL); } catch (e) { scheduleReconnect(); return; }
+    ws.addEventListener("open", function () { setStatus("połączono", true); send({ type: "hello" }); });
+    ws.addEventListener("message", function (ev) {
+      var msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      handle(msg);
+    });
+    ws.addEventListener("close", function () { setStatus("rozłączono", false); scheduleReconnect(); });
+    ws.addEventListener("error", function () { try { ws.close(); } catch (e) {} });
+  }
+  function scheduleReconnect() { clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 1000); }
+  function send(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(obj)); return true; }
+    return false;
+  }
+  function setStatus(t, ok) { statusEl.textContent = t; statusEl.className = "status" + (ok ? " ok" : ""); }
+
+  function handle(msg) {
+    if (msg.type === "render") {
+      swapSvg(msg.svg);
+      setCurrent(msg.version);
+      renderTimeline(msg.history, msg.version.id);
+    } else if (msg.type === "show") {
+      swapSvg(msg.svg);
+      setCurrent(msg.version);
+      markCurrentInTimeline(msg.version.id);
+    } else if (msg.type === "reload") {
+      location.reload();
+    }
+  }
+  function setCurrent(version) {
+    currentVersionId = version.id;
+    curLabel.textContent = version.id + (version.title ? " · " + version.title : "");
+  }
+
+  // Bezpieczne wstawienie SVG: parsujemy jako XML i importujemy węzeł (bez właściwości HTML).
+  function swapSvg(svg) {
+    clearChildren(stage);
+    if (!svg) { stage.appendChild(emptyMsg("Pusty diagram.")); markCommented(); return; }
+    var doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+    var root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() === "parsererror") {
+      stage.appendChild(emptyMsg("Błąd parsowania SVG.")); return;
+    }
+    stage.appendChild(document.importNode(root, true));
+    markCommented();
+  }
+
+  function renderTimeline(history, currentId) {
+    clearChildren(timelineEl);
+    (history || []).forEach(function (v) {
+      var li = document.createElement("li");
+      li.dataset.id = v.id;
+      if (v.id === currentId) li.className = "current";
+      var label = document.createElement("span");
+      label.textContent = v.id + (v.title ? " · " + v.title : "");
+      li.appendChild(label);
+      if (v.basedOn) {
+        var b = document.createElement("span");
+        b.className = "based"; b.textContent = "← " + v.basedOn;
+        li.appendChild(b);
+      }
+      timelineEl.appendChild(li);
+    });
+  }
+  function markCurrentInTimeline(id) {
+    Array.prototype.forEach.call(timelineEl.children, function (li) {
+      li.className = li.dataset.id === id ? "current" : "";
+    });
+  }
+
+  timelineEl.addEventListener("click", function (ev) {
+    var li = ev.target.closest("li");
+    if (li && li.dataset.id) send({ type: "request-show", id: li.dataset.id });
+  });
+
+  stage.addEventListener("click", function (ev) {
+    var el = ev.target.closest("[data-node-id],[data-edge-id]");
+    if (!el) return;
+    var id = el.getAttribute("data-node-id") || el.getAttribute("data-edge-id");
+    openPopover({ kind: "element", id: id }, ev.clientX, ev.clientY);
+  });
+  globalBtn.addEventListener("click", function () {
+    openPopover({ kind: "global" }, window.innerWidth - 320, 120);
+  });
+
+  function openPopover(target, x, y) {
+    activeTarget = target;
+    popTarget.textContent = target.kind === "global" ? "Komentarz ogólny" : "Element: " + target.id;
+    popText.value = "";
+    popover.style.left = Math.min(x, window.innerWidth - 300) + "px";
+    popover.style.top = Math.min(y, window.innerHeight - 220) + "px";
+    popover.classList.add("open");
+    popText.focus();
+  }
+  function closePopover() { popover.classList.remove("open"); activeTarget = null; }
+
+  Array.prototype.forEach.call(popover.querySelectorAll(".chips button"), function (b) {
+    b.addEventListener("click", function () {
+      popText.value = (b.dataset.emoji + " " + popText.value).replace(/^\s+/, "");
+      popText.focus();
+    });
+  });
+  document.getElementById("popCancel").addEventListener("click", closePopover);
+  document.getElementById("popAdd").addEventListener("click", function () {
+    var text = popText.value.trim();
+    if (!text || !activeTarget) { closePopover(); return; }
+    queue.push({ versionId: currentVersionId, target: activeTarget, text: text });
+    updateQueue();
+    closePopover();
+    markCommented();
+  });
+
+  function updateQueue() {
+    queueEl.textContent = queue.length + (queue.length === 1 ? " komentarz" : " komentarzy") + " w kolejce";
+    sendBtn.disabled = queue.length === 0;
+  }
+  function markCommented() {
+    var ids = {};
+    queue.forEach(function (cm) {
+      if (cm.versionId === currentVersionId && cm.target.kind === "element") ids[cm.target.id] = true;
+    });
+    Array.prototype.forEach.call(stage.querySelectorAll("[data-node-id],[data-edge-id]"), function (el) {
+      var id = el.getAttribute("data-node-id") || el.getAttribute("data-edge-id");
+      if (ids[id]) el.setAttribute("data-commented", "1"); else el.removeAttribute("data-commented");
+    });
+  }
+
+  sendBtn.addEventListener("click", function () {
+    if (queue.length === 0) return;
+    if (send({ type: "flush", comments: queue.slice() })) {
+      queue = [];
+      updateQueue();
+      markCommented();
+    }
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>
