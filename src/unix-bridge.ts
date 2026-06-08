@@ -5,8 +5,11 @@ import { tmpdir } from "os";
 import { join } from "path";
 import type { BridgeLike, Comment, ViewerInbound, ViewerOutbound } from "./types";
 import { createFrameDecoder, encodeFrame } from "./wire";
+import { SocketWriter } from "./socket-writer";
 
 type SpawnFn = typeof Bun.spawn;
+
+const FRAME_ENCODER = new TextEncoder();
 
 export interface UnixSocketBridgeOptions {
   // Absolute path to the built Electrobun binary (.app/Contents/MacOS/launcher), or null if not built.
@@ -18,6 +21,7 @@ export interface UnixSocketBridgeOptions {
 export class UnixSocketBridge implements BridgeLike {
   private listener: ReturnType<typeof Bun.listen> | null = null;
   private client: { write(data: string): number } | null = null;
+  private writer: SocketWriter | null = null;
   private child: Subprocess | null = null;
   // Fresh per connection: a stale partial frame from a dead client must never prefix the next one.
   private decode: (chunk: Uint8Array | string) => ViewerInbound[] = createFrameDecoder<ViewerInbound>();
@@ -38,9 +42,10 @@ export class UnixSocketBridge implements BridgeLike {
     this.listener = Bun.listen({
       unix: this.sockPath,
       socket: {
-        open(socket) { self.client = socket; self.decode = createFrameDecoder<ViewerInbound>(); },
+        open(socket) { self.client = socket; self.writer = new SocketWriter(socket); self.decode = createFrameDecoder<ViewerInbound>(); },
         data(_socket, data) { for (const msg of self.decode(data)) self.dispatch(msg); },
-        close() { self.client = null; },
+        drain(_socket) { self.writer?.drain(); },
+        close() { self.client = null; self.writer = null; },
       },
     });
   }
@@ -53,7 +58,7 @@ export class UnixSocketBridge implements BridgeLike {
 
   broadcast(msg: ViewerOutbound): void {
     if (msg.type === "render") this.ensureViewer();
-    this.client?.write(encodeFrame(msg));
+    this.writer?.write(FRAME_ENCODER.encode(encodeFrame(msg)));
   }
 
   // Lazily spawn the window; idempotent while a child is alive; respawns after the window closes.

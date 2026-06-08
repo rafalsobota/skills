@@ -113,3 +113,22 @@ test("per-connection decoder reset: client A's partial frame does not corrupt cl
   expect(shown!).toBe("v9");
   b.end();
 });
+
+test("a large multibyte broadcast is delivered intact across many socket reads", async () => {
+  const { spawn } = fakeSpawn();
+  bridge = new UnixSocketBridge({ launcherPath: "/fake/launcher", spawn });
+  await bridge.start();
+  const received: ViewerOutbound[] = [];
+  const decode = createFrameDecoder<ViewerOutbound>();
+  const client = await Bun.connect({
+    unix: bridge.sockPath,
+    socket: { data(_s, d) { for (const m of decode(d)) received.push(m); } },
+  });
+  // ~200KB of multibyte text -> guaranteed to span many ~8KB socket reads.
+  const big = "ąćż🔍✗✂️💬 relacja ".repeat(8000);
+  bridge.broadcast({ type: "show", version: { id: "v1", basedOn: null, createdAt: 0 }, svg: big });
+  await waitFor(() => received.some((m) => m.type === "show"), 5000);
+  const got = received.find((m) => m.type === "show") as { svg: string };
+  expect(got.svg).toBe(big); // byte-perfect: no mojibake, no truncation
+  client.end();
+});

@@ -2,7 +2,10 @@
 import { BrowserWindow, BrowserView, Utils, type RPCSchema } from "electrobun/bun";
 import type { Socket } from "bun";
 import { encodeFrame, createFrameDecoder } from "../../../src/wire";
+import { SocketWriter } from "../../../src/socket-writer";
 import type { Comment, ViewerInbound, ViewerOutbound, VersionMeta } from "../../../src/types";
+
+const FRAME_ENCODER = new TextEncoder();
 
 // Shared RPC schema (imported by the webview via `import type`).
 // NOTE: with electrobun@1.18.4-beta.5 the messages schema maps a name -> its
@@ -35,9 +38,10 @@ if (!SOCK) {
 }
 
 let client: Socket<unknown> | null = null;
+let writer: SocketWriter | null = null;
 
 function sendToServer(msg: ViewerInbound): void {
-  client?.write(encodeFrame(msg));
+  writer?.write(FRAME_ENCODER.encode(encodeFrame(msg)));
 }
 
 // Bun side handles webview->bun messages and relays them to the server socket.
@@ -86,8 +90,9 @@ async function connectWithWatchdog(attempt = 0): Promise<void> {
     client = await Bun.connect({
       unix: SOCK,
       socket: {
-        open(socket) { client = socket; sendToServer({ type: "hello" }); },
+        open(socket) { client = socket; writer = new SocketWriter(socket); sendToServer({ type: "hello" }); },
         data(_socket, data) { for (const m of decode(data)) handleFromServer(m); },
+        drain(_socket) { writer?.drain(); },
         close() { Utils.quit(); }, // watchdog: server gone
         end() { Utils.quit(); },
         error() { Utils.quit(); },
