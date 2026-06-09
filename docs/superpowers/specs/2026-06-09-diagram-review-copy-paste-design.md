@@ -32,24 +32,28 @@ buildu, zero hostingu, zero procesów w tle, zero sieci.
 
 ## Architektura
 
-Skill o nazwie **`diagram-review`** — katalog zawierający:
+Skill o nazwie **`diagram-review`** — katalog zawierający tylko **dwa pliki**:
 
 | Plik | Rola |
 |------|------|
-| `SKILL.md` | Instrukcja dla Claude: jak generować SVG, jak złożyć HTML, gdzie zapisać plik, że robi `open`, jak czytać wklejony feedback. |
-| `overlay.js` | Nakładka UI — jeden samodzielny plik JS, wbudowywany **inline** w generowany HTML. |
-| `template.html` | Szkielet HTML: slot na SVG, slot na metadane wersji, inline `overlay.js`. |
+| `template.html` | **Samowystarczalny szkielet** — CSS i JS nakładki już wbudowane inline. Placeholdery: `{{VERSION}}`, `{{FILE}}` i slot na SVG (`<!-- SVG -->`). |
+| `SKILL.md` | Instrukcja dla Claude: jak generować SVG, jak wypełnić szablon, gdzie zapisać plik, że robi `open`, jak czytać wklejony feedback. |
 
 Wygenerowany artefakt to **pojedynczy, samowystarczalny plik `.html`** (SVG +
 nakładka + metadane w jednym pliku). Otwiera się w dowolnej przeglądarce,
 działa offline, bez CDN, bez CORS, bez supply-chain.
 
+Składanie pliku jest trywialne i bez buildu: Claude kopiuje `template.html` i
+podmienia trzy placeholdery (`cp` + Edit), nie re-emitując statycznego CSS/JS.
+Dlatego **nie ma osobnego `overlay.js` ani kroku „assemble"** — cała nakładka
+żyje w `template.html`.
+
 ## Przepływ end-to-end
 
 ```
 Claude generuje SVG (elementy commentowalne mają atrybut data-id)
-   → wstawia SVG + metadane + inline overlay.js w template.html
    → wybiera numer wersji N (max istniejących w katalogu + 1)
+   → kopiuje template.html i podmienia placeholdery: {{VERSION}}, {{FILE}}, <!-- SVG -->
    → zapisuje plik diagram-vN.html w domyślnej lokalizacji
    → uruchamia `open <ścieżka>`
         ↓
@@ -94,20 +98,22 @@ Targetowanie ograniczone do dwóch przypadków:
 
 ## Szablon HTML i metadane
 
-`template.html` zawiera u góry blok metadanych wypełniany przez Claude przy
-generacji:
+`template.html` zawiera u góry blok metadanych z placeholderami wypełnianymi
+przez Claude przy generacji:
 
 ```html
-<script>window.diagramMeta = { version: "v2", file: "diagram-v2.html" };</script>
+<script>window.diagramMeta = { version: "{{VERSION}}", file: "{{FILE}}" };</script>
 ```
 
-Następnie inline'owana zawartość `overlay.js`. Nakładka po załadowaniu odczytuje
+Niżej w tym samym pliku siedzi inline `<style>` (CSS nakładki) oraz
+`<script type="module">` budujący nakładkę. Po załadowaniu skrypt odczytuje
 `window.diagramMeta`, żeby wstawić poprawny nagłówek do kopiowanego tekstu.
 
-## Zachowanie nakładki (`overlay.js`)
+## Zachowanie nakładki (inline w `template.html`)
 
-1. Po `DOMContentLoaded`: skanuje `[data-id]`, dorzuca do każdego elementu
-   hover-highlight oraz handler kliknięcia.
+1. Po załadowaniu modułu: skanuje `[data-id]`, dorzuca do każdego elementu
+   hover-highlight oraz handler kliknięcia. UI budowane przez
+   `createElement`/`textContent` (bez `innerHTML` na danych użytkownika).
 2. Klik w element → popover przy elemencie z `<textarea>` i przyciskiem „Dodaj".
    „Dodaj" dopisuje komentarz `{ target: <data-id>, text }` do tablicy w pamięci.
 3. Stały pasek (np. dół ekranu): licznik „N komentarzy", przycisk
@@ -148,11 +154,12 @@ pokazuje `<textarea>` z gotowym tekstem zaznaczonym w całości i podpowiedzią
 
 ## Testowanie
 
-- `overlay.js` zaprojektowany tak, by logika składania Markdownu
-  (`buildFeedbackMarkdown(meta, comments)`) była czystą funkcją — testowalną w
-  izolacji bez DOM.
-- Reszta nakładki (skan `data-id`, popover, schowek) to cienka warstwa DOM —
-  weryfikowana ręcznie przez otwarcie przykładowego `diagram-v1.html`.
+- Deliverable to statyczny, samowystarczalny asset (CSS+JS inline), więc nie ma
+  modułu do importu w unit-teście; Bun nie ma DOM, a dokładanie jsdom/happy-dom
+  przeczyłoby zasadzie „zero zależności".
+- Weryfikacja przez **smoke-test manualny**: otwórz wygenerowany `diagram-v1.html`,
+  kliknij element, dodaj komentarz, „Kopiuj dla Claude", sprawdź, że skopiowany
+  Markdown zgadza się z oczekiwanym formatem. Dokładne kroki w planie implementacji.
 - Brak warstwy transportu = brak testów integracyjnych socketu/wire/bridge.
 
 ## Migracja
