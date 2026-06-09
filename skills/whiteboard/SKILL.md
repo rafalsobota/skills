@@ -1,9 +1,9 @@
 ---
-name: diagram-review
-description: Use when the user wants to see, review, or iterate on a diagram (architecture, graph, flow, state machine, data model) and leave comments on its parts. Renders an SVG into an HTML file with a click-to-comment overlay, opens it in the browser, and reads back the feedback the user pastes into the conversation.
+name: whiteboard
+description: Use when a wall of text isn't landing and it would be clearer to draw it out — like sketching on an office whiteboard. Also when the user wants to see, point at, or iterate on a diagram (architecture, flow, state machine, data model, dependency map). Renders an SVG as an interactive browser canvas where the user drops pin comments on any element, then reads their pasted feedback back to redraw.
 ---
 
-# diagram-review
+# whiteboard
 
 Render a diagram the user can annotate, then iterate from their pasted feedback.
 Claude owns the graph; the HTML only displays it and collects comments. The return
@@ -49,10 +49,10 @@ Let `SKILL_DIR` be this skill's own directory (where `template.html` and
    diagram based on its content (e.g. `auth-flow`, `microservices-overview`,
    `payment-state-machine`). For the first version use the bare name; for iterations
    append `-v2`, `-v3` etc. only when you actually produce a new version in response
-   to feedback. Default output directory is `${TMPDIR:-/tmp}/diagram-review`:
+   to feedback. Default output directory is `${TMPDIR:-/tmp}/whiteboard`:
 
    ```bash
-   OUTDIR="${TMPDIR:-/tmp}/diagram-review"; mkdir -p "$OUTDIR"
+   OUTDIR="${TMPDIR:-/tmp}/whiteboard"; mkdir -p "$OUTDIR"
    cp -f "$SKILL_DIR/overlay.js" "$OUTDIR/overlay.js"   # refresh shared overlay (idempotent)
    NAME="auth-flow"          # ← chosen by Claude, bare name or name-v2, name-v3, …
    OUT="$OUTDIR/$NAME.html"

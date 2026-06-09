@@ -14,7 +14,7 @@ Using the [skills.sh](https://skills.sh) CLI ([`vercel-labs/skills`](https://git
 npx skills add rafalsobota/skills
 
 # or a single skill
-npx skills add rafalsobota/skills/skills/diagram-review
+npx skills add rafalsobota/skills/skills/whiteboard
 ```
 
 This drops the skill into your agent's skills directory (e.g. `.claude/skills/`).
@@ -24,13 +24,13 @@ You can also just copy a skill folder into your own `.claude/skills/` manually.
 
 | Skill | What it does |
 | --- | --- |
-| [`diagram-review`](skills/diagram-review/) | Render a diagram (architecture, flow, state machine, data model) as an HTML canvas with Figma-style click-to-comment pins, open it in the browser, and feed the user's pasted feedback back into the conversation to iterate. No server — the return path is a copied Markdown block. |
+| [`whiteboard`](skills/whiteboard/) | When a wall of text isn't landing, Claude draws it out like on an office whiteboard — architecture, flow, state machine, data model, dependency map. Renders an SVG as a browser canvas with Figma-style click-to-comment pins; the user points at parts, pastes a Markdown block back, and Claude redraws. No server. |
 
 ## Usage
 
 Once installed, the skill activates automatically when its description matches what
-you're doing — e.g. asking Claude to "draw and let me review an architecture diagram"
-triggers `diagram-review`. You can also invoke a skill explicitly by name.
+you're doing — e.g. saying "I don't get this, draw it out for me" or asking for an
+architecture diagram triggers `whiteboard`. You can also invoke a skill explicitly by name.
 
 ## Contributing
 

@@ -1,4 +1,4 @@
-// Shared diagram-review overlay — Figma-style pins on infinite canvas.
+// Shared whiteboard overlay — Figma-style pins on infinite canvas.
 // CLASSIC script (not a module) so it loads from file:// without CORS issues.
 (function () {
   if (typeof document === "undefined") return;
