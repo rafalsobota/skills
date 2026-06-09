@@ -54,16 +54,16 @@ Let `SKILL_DIR` be this skill's own directory (where `template.html` and
    step 2 copied `overlay.js`.
 
 4. **Open it.** `open "$OUT"` (macOS). Tell the user: click any element to comment,
-   use "Komentarz do całości" for whole-diagram notes, then "Kopiuj dla Claude" and
+   use "Comment on whole diagram" for whole-diagram notes, then "Copy for Claude" and
    paste the result back here.
 
 5. **Iterate from pasted feedback.** The user pastes a block like:
 
    ```
-   ## Feedback do diagramu v2 (plik: diagram-v2.html)
+   ## Feedback on diagram v2 (file: diagram-v2.html)
 
-   - **[element: auth-service]** nie powinno zależeć od cache
-   - **[całość]** rozbij na dwie warstwy
+   - **[element: auth-service]** should not depend on cache
+   - **[whole diagram]** split into two layers
    ```
 
    The header tells you the base version. Apply the comments, regenerate the SVG as

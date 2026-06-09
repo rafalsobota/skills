@@ -121,16 +121,22 @@ CSS i logika żyją w `overlay.js`; po załadowaniu skrypt odczytuje
 
 ## Zachowanie nakładki (`overlay.js`)
 
+UI w całości po **angielsku**; wzorowane na profesjonalnych narzędziach do
+review (Figma comments / Linear). UI budowane przez `createElement`/`textContent`
+(bez `innerHTML` na danych użytkownika). Tryb ciemny przez `prefers-color-scheme`.
+
 1. Po załadowaniu skryptu: wstrzykuje `<style>`, skanuje `[data-id]`, dorzuca do
-   każdego elementu hover-highlight oraz handler kliknięcia. UI budowane przez
-   `createElement`/`textContent` (bez `innerHTML` na danych użytkownika).
-2. Klik w element → popover przy elemencie z `<textarea>` i przyciskiem „Dodaj".
-   „Dodaj" dopisuje komentarz `{ target: <data-id>, text }` do tablicy w pamięci.
-3. Stały pasek (np. dół ekranu): licznik „N komentarzy", przycisk
-   **„Komentarz do całości"** (popover bez konkretnego elementu, `target: global`)
-   oraz przycisk **„Kopiuj dla Claude"**.
-4. „Kopiuj dla Claude" składa Markdown (format niżej) z `window.diagramMeta` +
-   listy komentarzy i woła `navigator.clipboard.writeText`.
+   każdego elementu hover-highlight oraz handler kliknięcia.
+2. **Prawy sidebar** (stały, 340px) — `body { margin-right }` sprawia, że diagram
+   **nigdy nie jest zasłaniany** rosnącą listą. Nagłówek (tytuł „Review" + pill
+   wersji + licznik), przewijalna lista kart, stopka z przyciskami.
+3. Klik w element → composer (popover przy elemencie) z `<textarea>` i „Add".
+   Komentarz `{ id, target: <data-id>|null, text }` ląduje w tablicy w pamięci.
+4. **Numerowane piny** na skomentowanych elementach (jak w Figmie), zsynchronizowane
+   z kartami w sidebarze: hover karty podświetla element + pin; klik pinu przewija
+   do karty. Piny pozycjonowane wg `getBoundingClientRect`, korygowane na resize/scroll.
+5. Stopka: **„Comment on whole diagram"** (secondary, `target: null`) oraz primary
+   **„Copy for Claude"** — składa Markdown (format niżej) i woła `navigator.clipboard.writeText`.
 
 Stan (lista komentarzy) trzymany wyłącznie w pamięci karty. Brak persystencji
 komentarzy — po skopiowaniu i regeneracji powstaje nowa wersja, nowy plik.
@@ -140,16 +146,16 @@ komentarzy — po skopiowaniu i regeneracji powstaje nowa wersja, nowy plik.
 Markdown, samoopisowy (Claude dostaje go jako wklejkę bez dodatkowego kontekstu):
 
 ```
-## Feedback do diagramu v2 (plik: diagram-v2.html)
+## Feedback on diagram v2 (file: diagram-v2.html)
 
-- **[element: auth-service]** nie powinno zależeć od cache
-- **[element: gateway]** czy to na pewno potrzebne?
-- **[całość]** da się to rozbić na dwie warstwy?
+- **[element: auth-service]** should not depend on cache
+- **[element: gateway]** is this really needed?
+- **[whole diagram]** split into two layers?
 ```
 
 Elementy formatu:
 - nagłówek z **id wersji** (Claude wie, na czym bazować) i nazwą pliku,
-- każdy komentarz mówi, czego dotyczy: `[element: <data-id>]` lub `[całość]`,
+- każdy komentarz mówi, czego dotyczy: `[element: <data-id>]` lub `[whole diagram]`,
 - po znaczniku — wolny tekst komentarza.
 
 ## Obsługa błędów
