@@ -100,11 +100,12 @@ atrybutem staje się klikalny. Brak rozróżnienia węzeł/krawędź — krawęd
 mogą dostać `data-id`, ale w feedbacku wszystko jest jednolicie „elementem".
 
 Targetowanie ograniczone do dwóch przypadków:
-- **konkretny element** (kliknięty `data-id`),
-- **całość** (przycisk „Komentarz do całości").
+- **konkretny element** (pin przy klikniętym `data-id`, jeden komentarz na element),
+- **całość diagramu** (jeden komentarz „overall" na górze panelu).
 
-Świadomie **wycięte** (YAGNI): osobna kategoria krawędzi, zaznaczanie regionów
-(wielu elementów naraz), znaczniki intencji (emoji 🔍/✗/✂️/❓).
+Świadomie **wycięte** (YAGNI): wiele komentarzy do całości, osobna kategoria
+krawędzi, zaznaczanie regionów (wielu elementów naraz), znaczniki intencji
+(emoji 🔍/✗/✂️/❓), wątki/odpowiedzi na komentarzach.
 
 ## Szablon HTML i metadane
 
@@ -127,41 +128,45 @@ review (Figma comments / Linear). UI budowane przez `createElement`/`textContent
 
 1. Po załadowaniu skryptu: wstrzykuje `<style>`, skanuje `[data-id]`, dorzuca do
    każdego elementu hover-highlight oraz handler kliknięcia.
-2. **Prawy sidebar = obszar roboczy** (dokowany, 340px) — `body { margin-right }`
-   sprawia, że diagram **nigdy nie jest zasłaniany** rosnącą listą. Nagłówek (tytuł
-   „Review" + pill wersji + chevron zwijania), przewijalna lista kart, stopka z „Copy".
-3. **Ciągła edycja — bez popoverów/modali.** Każdy komentarz to zawsze edytowalna
-   `<textarea>` (autosave na `input`, autogrow). Pusta karta znika na `blur`.
-   Klik w element → od razu nowa edytowalna karta `{ id, target: <data-id>, text }`
-   (focus + scroll). Na dole listy stale czeka pusty draft „Comment on the whole
-   diagram…" (`target: null`); Enter/blur z treścią tworzy kartę, draft się czyści.
-4. **Numerowane piny** na skomentowanych elementach (jak w Figmie), zsynchronizowane
-   z kartami: hover karty podświetla element + pin; klik pinu rozwija panel i przewija
-   do karty. Piny pozycjonowane wg `getBoundingClientRect`, korygowane na resize/scroll.
-5. **Zwijanie panelu.** Chevron chowa sidebar (`translateX`), diagram zajmuje pełną
+2. **Prawy sidebar** (dokowany, 340px) — `body { margin-right }` sprawia, że diagram
+   **nigdy nie jest zasłaniany**. Nagłówek (tytuł „Review" + pill wersji + chevron),
+   na górze **jeden** komentarz do całości (pole jak commit message), niżej
+   lista-nawigacja komentarzy elementów, stopka z „Copy for AI".
+3. **Jeden komentarz do całości** (`overall`, string) — pojedyncze, zawsze dostępne
+   pole, analogicznie do wiadomości commита. Nie ma wielu globalnych komentarzy.
+4. **Komentarze elementów po Figmowemu — inline na płótnie.** Klik elementu → pin
+   `{ id, target: <data-id>, text }` + popover-edytor przy pinie (autosave). **Hover
+   pinu** → dymek z treścią (read); **klik pinu** → edycja inline. Jeden komentarz na
+   element. Pusty na `blur` → pin znika. Lista w sidebarze to tylko nawigacja (klik
+   wiersza → przewija do elementu i otwiera edytor). Piny pozycjonowane wg
+   `getBoundingClientRect`, korygowane na resize/scroll.
+5. **Podgląd kopii + „Copy for AI" (agnostyczne).** Hover na przycisku „Copy for AI"
+   pokazuje dymek z dokładnym Markdownem, który trafi do schowka. Klik kopiuje
+   (z fallbackiem `<textarea>`). Treść jest uniwersalna — działa z dowolnym agentem AI.
+6. **Zwijanie panelu.** Chevron chowa sidebar (`translateX`), diagram zajmuje pełną
    szerokość, a w rogu zostaje pływający pill „Review · N" do rozwinięcia. Piny
-   zostają na diagramie. **„Copy for Claude"** składa Markdown (format niżej,
-   pomijając puste karty) i woła `navigator.clipboard.writeText`.
+   zostają na diagramie.
 
-Stan (lista komentarzy) trzymany wyłącznie w pamięci karty. Brak persystencji
-komentarzy — po skopiowaniu i regeneracji powstaje nowa wersja, nowy plik.
+Stan trzymany wyłącznie w pamięci karty. Brak persystencji — po skopiowaniu i
+regeneracji powstaje nowa wersja, nowy plik.
 
-## Format kopiowanego tekstu (kontrakt nakładka → Claude)
+## Format kopiowanego tekstu (kontrakt nakładka → agent AI)
 
-Markdown, samoopisowy (Claude dostaje go jako wklejkę bez dodatkowego kontekstu):
+Markdown, samoopisowy (agent dostaje go jako wklejkę bez dodatkowego kontekstu):
 
 ```
 ## Feedback on diagram v2 (file: diagram-v2.html)
 
+> split this into two layers
+
 - **[element: auth-service]** should not depend on cache
 - **[element: gateway]** is this really needed?
-- **[whole diagram]** split into two layers?
 ```
 
 Elementy formatu:
-- nagłówek z **id wersji** (Claude wie, na czym bazować) i nazwą pliku,
-- każdy komentarz mówi, czego dotyczy: `[element: <data-id>]` lub `[whole diagram]`,
-- po znaczniku — wolny tekst komentarza.
+- nagłówek z **id wersji** (agent wie, na czym bazować) i nazwą pliku,
+- opcjonalny `>` blockquote = jeden komentarz do całości diagramu,
+- każdy bullet `- **[element: <data-id>]**` celuje w jeden element + wolny tekst.
 
 ## Obsługa błędów
 

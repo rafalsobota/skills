@@ -53,18 +53,24 @@ Let `SKILL_DIR` be this skill's own directory (where `template.html` and
    The `<script src="overlay.js">` in the template resolves next to the HTML, where
    step 2 copied `overlay.js`.
 
-4. **Open it.** `open "$OUT"` (macOS). Tell the user: click any element to comment,
-   use "Comment on whole diagram" for whole-diagram notes, then "Copy for Claude" and
-   paste the result back here.
+4. **Open it.** `open "$OUT"` (macOS). Tell the user: click any element to drop a
+   pin and comment on it inline (hover a pin to read, click to edit), write an
+   optional whole-diagram summary at the top of the panel, then hover "Copy for AI"
+   to preview and click it — and paste the result back here.
 
 5. **Iterate from pasted feedback.** The user pastes a block like:
 
    ```
    ## Feedback on diagram v2 (file: diagram-v2.html)
 
+   > split this into two layers
+
    - **[element: auth-service]** should not depend on cache
-   - **[whole diagram]** split into two layers
+   - **[element: gateway]** is this really needed?
    ```
+
+   The leading `>` blockquote (if present) is the whole-diagram note; each `- [element: …]`
+   bullet targets one element by its `data-id`.
 
    The header tells you the base version. Apply the comments, regenerate the SVG as
    `v(N+1)`, and repeat from step 2. Keep `data-id`s stable for unchanged concepts.

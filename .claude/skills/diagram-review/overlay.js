@@ -3,10 +3,12 @@
 // Copied once into the output folder, referenced by every diagram-vN.html.
 // All UI + CSS live here, so the HTML files stay tiny.
 //
-// Model: the sidebar is a live workspace. Every comment is an always-editable
-// textarea (autosave on input, empty ones drop on blur). Clicking a diagram
-// element creates a focused card + pin. A persistent draft row at the bottom adds
-// whole-diagram comments. The panel collapses to a floating launcher pill.
+// Model:
+//   - ONE whole-diagram comment (commit-message style) at the top of the panel.
+//   - Element comments live on the canvas as Figma-style pins: click to add/edit
+//     inline, hover to read. The panel lists them for navigation.
+//   - "Copy for AI" copies an agent-agnostic Markdown block; hovering it previews
+//     the exact text. The panel collapses to a floating launcher pill.
 (function () {
   if (typeof document === "undefined") return;
 
@@ -27,15 +29,15 @@
 
   function plural(n) { return n === 1 ? "comment" : "comments"; }
 
-  function buildFeedbackMarkdown(meta, comments) {
-    const live = comments.filter((c) => String(c.text).trim());
+  function buildFeedbackMarkdown(meta, overall, items) {
     const header = `## Feedback on diagram ${meta.version} (file: ${meta.file})`;
-    if (!live.length) return `${header}\n\n_(no comments)_\n`;
-    const lines = live.map((c) => {
-      const tag = c.target == null ? "[whole diagram]" : `[element: ${c.target}]`;
-      return `- **${tag}** ${String(c.text).trim()}`;
-    });
-    return `${header}\n\n${lines.join("\n")}\n`;
+    const o = String(overall || "").trim();
+    const live = items.filter((i) => String(i.text).trim());
+    const parts = [header];
+    if (o) parts.push("> " + o.replace(/\n/g, "\n> "));
+    if (live.length) parts.push(live.map((i) => `- **[element: ${i.target}]** ${String(i.text).trim()}`).join("\n"));
+    if (parts.length === 1) return `${header}\n\n_(no comments)_\n`;
+    return parts.join("\n\n") + "\n";
   }
 
   function injectStyles() {
@@ -69,10 +71,9 @@
     .dr-target.dr-active { outline-color: var(--dr-accent); }
 
     .dr-pin { position: absolute; transform: translate(-50%, -50%); z-index: 2147482000;
-      min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px;
-      background: var(--dr-accent); color: #fff; font: 600 11px/22px system-ui, sans-serif;
-      text-align: center; cursor: pointer; border: 0; box-shadow: 0 0 0 2px var(--dr-bg), 0 2px 6px rgba(9,9,11,.3);
-      transition: transform .1s; }
+      min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px 999px 999px 2px;
+      background: var(--dr-accent); color: #fff; font: 600 11px/22px system-ui, sans-serif; text-align: center;
+      cursor: pointer; border: 0; box-shadow: 0 0 0 2px var(--dr-bg), 0 2px 6px rgba(9,9,11,.3); transition: transform .1s; }
     .dr-pin:hover, .dr-pin.dr-active { transform: translate(-50%, -50%) scale(1.12); background: var(--dr-accent-press); }
 
     #dr-sidebar { position: fixed; top: 0; right: 0; bottom: 0; width: var(--dr-w);
@@ -83,47 +84,68 @@
 
     .dr-head { padding: 16px 16px 12px; border-bottom: 1px solid var(--dr-border); }
     .dr-head-row { display: flex; align-items: center; gap: 8px; }
-    .dr-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+    .dr-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; flex: 1; }
     .dr-pill { font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dr-text-soft);
       background: var(--dr-bg-sunken); border: 1px solid var(--dr-border); padding: 4px 8px; border-radius: 999px; }
     .dr-icon-btn { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 8px;
       border: 1px solid var(--dr-border); background: var(--dr-bg); color: var(--dr-text-soft); cursor: pointer; font-size: 15px; line-height: 1; }
     .dr-icon-btn:hover { background: var(--dr-bg-sunken); color: var(--dr-text); }
-    .dr-sub { margin-top: 6px; color: var(--dr-text-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
 
-    .dr-list { flex: 1; overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-    .dr-card { position: relative; padding: 9px 11px; border: 1px solid var(--dr-border); border-radius: 10px;
-      background: var(--dr-bg); cursor: text; }
-    .dr-card:hover { border-color: color-mix(in srgb, var(--dr-accent) 30%, var(--dr-border)); }
-    .dr-card:focus-within { border-color: var(--dr-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dr-accent) 14%, transparent); }
-    .dr-draft { border-style: dashed; }
-    .dr-card-top { display: flex; align-items: center; gap: 8px; }
+    .dr-overall { padding: 12px 14px; border-bottom: 1px solid var(--dr-border); }
+    .dr-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--dr-text-faint); }
+    .dr-overall-input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px;
+      border: 1px solid var(--dr-border-strong); border-radius: 8px; background: var(--dr-bg-sunken); color: var(--dr-text);
+      font: 400 13px/1.45 system-ui, sans-serif; resize: none; overflow: hidden; min-height: 38px; }
+    .dr-overall-input::placeholder { color: var(--dr-text-faint); }
+    .dr-overall-input:focus { outline: 2px solid var(--dr-accent); outline-offset: -1px; border-color: transparent; }
+
+    .dr-list-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 6px; }
+    .dr-list { flex: 1; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+    .dr-row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px; border-radius: 9px; cursor: pointer; border: 1px solid transparent; }
+    .dr-row:hover { background: var(--dr-bg-sunken); border-color: color-mix(in srgb, var(--dr-accent) 25%, var(--dr-border)); }
+    .dr-row-text { min-width: 0; flex: 1; }
+    .dr-chip { font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dr-text-soft);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dr-row-snippet { margin-top: 2px; font-size: 13px; color: var(--dr-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dr-row-snippet.dr-faint { color: var(--dr-text-faint); }
     .dr-badge { flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px;
       background: var(--dr-accent); color: #fff; font: 600 11px/20px system-ui, sans-serif; text-align: center; }
-    .dr-badge.dr-global { background: color-mix(in srgb, var(--dr-text-soft) 22%, transparent); color: var(--dr-text-soft); }
-    .dr-chip { flex: 1; font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dr-text-soft);
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .dr-card-input { display: block; width: 100%; box-sizing: border-box; border: 0; background: transparent; resize: none;
-      overflow: hidden; margin-top: 6px; padding: 0; outline: none; min-height: 18px;
-      font: 400 13px/1.45 system-ui, sans-serif; color: var(--dr-text); }
-    .dr-card-input::placeholder { color: var(--dr-text-faint); }
-    .dr-del { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border: 0; border-radius: 6px;
-      background: transparent; color: var(--dr-text-faint); font-size: 16px; line-height: 1; cursor: pointer; opacity: 0; }
-    .dr-card:hover .dr-del { opacity: 1; }
-    .dr-del:hover { background: color-mix(in srgb, var(--dr-text-soft) 14%, transparent); color: var(--dr-text); }
-
-    .dr-empty { margin: 8px 4px 2px; padding: 18px 16px; text-align: center; color: var(--dr-text-faint);
+    .dr-empty { margin: 4px; padding: 18px 16px; text-align: center; color: var(--dr-text-faint);
       border: 1px dashed var(--dr-border-strong); border-radius: 10px; }
     .dr-empty-title { font-size: 13px; font-weight: 600; color: var(--dr-text-soft); }
     .dr-empty-body { margin-top: 6px; font-size: 12px; line-height: 1.5; }
 
-    .dr-foot { padding: 12px; border-top: 1px solid var(--dr-border); }
-    .dr-btn { width: 100%; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--dr-border-strong);
+    .dr-foot { position: relative; padding: 12px; border-top: 1px solid var(--dr-border); }
+    .dr-btn { width: 100%; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--dr-accent);
       background: var(--dr-accent); color: #fff; font: 600 13px/1 system-ui, sans-serif; cursor: pointer;
-      border-color: var(--dr-accent); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     .dr-btn:hover { background: var(--dr-accent-press); }
     .dr-btn:focus-visible { outline: 2px solid var(--dr-accent); outline-offset: 2px; }
-    .dr-btn:disabled { opacity: .5; cursor: default; background: var(--dr-accent); }
+    .dr-btn:disabled { opacity: .5; cursor: default; }
+
+    .dr-preview { position: absolute; left: 12px; right: 12px; bottom: calc(100% + 8px); max-height: 52vh; overflow: auto;
+      background: var(--dr-bg); color: var(--dr-text); border: 1px solid var(--dr-border-strong); border-radius: 10px;
+      box-shadow: var(--dr-shadow-pop); padding: 10px 12px; }
+    .dr-preview[hidden] { display: none; }
+    .dr-preview-label { font-size: 11px; font-weight: 600; color: var(--dr-text-faint); margin-bottom: 6px; }
+    .dr-preview-pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+      font: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dr-text); }
+
+    #dr-pop { position: fixed; width: 280px; background: var(--dr-bg); color: var(--dr-text);
+      border: 1px solid var(--dr-border-strong); border-radius: 12px; box-shadow: var(--dr-shadow-pop);
+      padding: 12px; z-index: 2147483500; }
+    #dr-pop[hidden] { display: none; }
+    .dr-pop-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .dr-pop-chip { flex: 1; font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dr-text-soft);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dr-pop-del { border: 0; background: transparent; color: var(--dr-text-faint); cursor: pointer; font-size: 12px; padding: 2px 4px; border-radius: 6px; }
+    .dr-pop-del:hover { background: color-mix(in srgb, var(--dr-text-soft) 14%, transparent); color: var(--dr-text); }
+    .dr-pop-input { display: block; width: 100%; box-sizing: border-box; border: 1px solid var(--dr-border-strong); border-radius: 8px;
+      background: var(--dr-bg-sunken); color: var(--dr-text); font: 400 13px/1.45 system-ui, sans-serif; padding: 8px 10px;
+      resize: none; overflow: hidden; min-height: 56px; }
+    .dr-pop-input:focus { outline: 2px solid var(--dr-accent); outline-offset: -1px; border-color: transparent; }
+    .dr-pop-read { font-size: 13px; line-height: 1.5; color: var(--dr-text); overflow-wrap: anywhere; white-space: pre-wrap; }
+    .dr-pop-read.dr-faint { color: var(--dr-text-faint); }
 
     .dr-launcher { position: fixed; top: 16px; right: 16px; z-index: 2147483001; display: inline-flex; align-items: center;
       gap: 8px; height: 36px; padding: 0 14px; border-radius: 999px; background: var(--dr-accent); color: #fff; border: 0;
@@ -134,16 +156,7 @@
     .dr-toast { position: fixed; bottom: 20px; right: 20px; background: #18181b; color: #fafafa; padding: 10px 14px;
       border-radius: 8px; font-size: 13px; box-shadow: var(--dr-shadow-pop); opacity: 0; transform: translateY(8px);
       transition: opacity .2s, transform .2s; z-index: 2147483600; }
-    .dr-toast.dr-show { opacity: 1; transform: translateY(0); }
-
-    .dr-modal { position: fixed; inset: 0; background: rgba(9,9,11,.45); display: grid; place-items: center; z-index: 2147483647; }
-    .dr-modal-box { background: var(--dr-bg); color: var(--dr-text); padding: 18px; border-radius: 14px;
-      width: min(560px, 92vw); box-shadow: var(--dr-shadow-pop); }
-    .dr-modal-box p { margin: 0 0 10px; font-size: 13px; color: var(--dr-text-soft); }
-    .dr-modal-text { width: 100%; box-sizing: border-box; font: 400 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-      padding: 10px; border-radius: 8px; border: 1px solid var(--dr-border-strong); background: var(--dr-bg-sunken); color: var(--dr-text); resize: vertical; }
-    .dr-modal-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
-    .dr-modal-actions .dr-btn { width: auto; padding: 0 16px; }`;
+    .dr-toast.dr-show { opacity: 1; transform: translateY(0); }`;
     document.head.append(el("style", { text: css }));
   }
 
@@ -153,153 +166,152 @@
     const meta = window.diagramMeta || { version: "v?", file: "" };
     let seq = 0;
     let collapsed = false;
-    let pendingFocus = null; // {id} | {draft:true}
-    const comments = []; // { id, target: string|null, text }
+    let overall = "";
+    const items = []; // { id, target, text } — one per element
+
+    // popover state
+    let popMode = null, popItem = null, popPin = null, hideTimer = null;
 
     injectStyles();
 
-    // --- sidebar skeleton ---
+    const numberOf = (target) => items.findIndex((i) => i.target === target) + 1;
+    const liveCount = () => (overall.trim() ? 1 : 0) + items.filter((i) => String(i.text).trim()).length;
+
+    // --- sidebar ---
     const pill = el("span", { class: "dr-pill", text: meta.version });
     const collapseBtn = el("button", { class: "dr-icon-btn", type: "button", title: "Collapse panel", "aria-label": "Collapse panel", text: "»" });
-    const sub = el("div", { class: "dr-sub" });
+    const overallInput = el("textarea", { class: "dr-overall-input", rows: "1",
+      placeholder: "Summarize feedback for the whole diagram… (like a commit message)", "aria-label": "Whole-diagram comment" });
+    const listCount = el("span", { class: "dr-chip", text: "" });
     const listEl = el("div", { class: "dr-list", role: "list" });
-    const copyBtn = el("button", { class: "dr-btn", type: "button", disabled: "", text: "Copy for Claude" });
+    const copyBtn = el("button", { class: "dr-btn", type: "button", disabled: "", text: "Copy for AI" });
+    const previewPre = el("pre", { class: "dr-preview-pre" });
+    const previewPop = el("div", { class: "dr-preview", hidden: "" },
+      el("div", { class: "dr-preview-label", text: "Will be copied — paste into any AI agent" }), previewPre);
     const sidebar = el("aside", { id: "dr-sidebar", onClick: (e) => e.stopPropagation() },
       el("div", { class: "dr-head" },
-        el("div", { class: "dr-head-row" },
-          el("div", { class: "dr-title", text: "Review" }),
-          el("span", { class: "dr-chip" }), // spacer
-          pill, collapseBtn,
-        ),
-        sub,
-      ),
+        el("div", { class: "dr-head-row" }, el("div", { class: "dr-title", text: "Review" }), pill, collapseBtn)),
+      el("div", { class: "dr-overall" }, el("div", { class: "dr-label", text: "Whole diagram" }), overallInput),
+      el("div", { class: "dr-list-head" }, el("span", { class: "dr-label", text: "Element comments" }), listCount),
       listEl,
-      el("div", { class: "dr-foot" }, copyBtn),
+      el("div", { class: "dr-foot" }, previewPop, copyBtn),
     );
     const launcherCount = el("span", { class: "dr-launcher-count" });
     const launcher = el("button", { class: "dr-launcher", type: "button", hidden: "", "aria-label": "Open review panel" },
       el("span", { text: "Review" }), launcherCount);
 
-    // --- comment ops ---
-    function addElementComment(target) {
-      const c = { id: ++seq, target, text: "" };
-      comments.push(c);
-      pendingFocus = { id: c.id };
-      render();
-    }
-    function commitDraft(text) {
-      if (!text.trim()) return;
-      comments.push({ id: ++seq, target: null, text: text.trim() });
-      pendingFocus = { draft: true };
-      render();
-    }
-    function removeComment(c) {
-      const i = comments.indexOf(c);
-      if (i >= 0) { comments.splice(i, 1); render(); }
+    // --- canvas popover (read + edit) ---
+    const popBody = el("div", {});
+    const pop = el("div", { id: "dr-pop", hidden: "",
+      onMouseenter: () => clearTimeout(hideTimer),
+      onMouseleave: () => { if (popMode === "read") scheduleHide(); },
+      onClick: (e) => e.stopPropagation() }, popBody);
+
+    function scheduleHide() { clearTimeout(hideTimer); hideTimer = setTimeout(hidePop, 180); }
+    function hidePop() { pop.hidden = true; popMode = null; popItem = null; popPin = null; }
+    function placePop(pinEl) {
+      const r = pinEl.getBoundingClientRect();
+      const w = 280;
+      let left = r.left - w - 10;
+      if (left < 10) left = Math.min(r.right + 10, window.innerWidth - w - 10);
+      const top = Math.min(Math.max(10, r.top), window.innerHeight - 160);
+      pop.style.left = Math.max(10, left) + "px";
+      pop.style.top = top + "px";
     }
 
-    function pinOrder() {
-      const order = [];
-      for (const c of comments) if (c.target != null && !order.includes(c.target)) order.push(c.target);
-      return order;
-    }
-    function setActive(target, on) {
-      if (target == null) return;
-      const node = document.querySelector(`[data-id="${CSS.escape(target)}"]`);
-      if (node) node.classList.toggle("dr-active", on);
-      for (const p of document.querySelectorAll(".dr-pin"))
-        if (p.dataset.target === target) p.classList.toggle("dr-active", on);
+    function showRead(item, pinEl) {
+      if (popMode === "edit") return;
+      popMode = "read"; popItem = item; popPin = pinEl;
+      const txt = String(item.text).trim();
+      popBody.replaceChildren(
+        el("div", { class: "dr-pop-top" }, el("span", { class: "dr-badge", text: String(numberOf(item.target)) }), el("span", { class: "dr-pop-chip", text: item.target })),
+        el("div", { class: "dr-pop-read" + (txt ? "" : " dr-faint"), text: txt || "Empty — click to add a comment" }),
+      );
+      pop.hidden = false; placePop(pinEl);
     }
 
-    function commentCard(c, numberOf) {
-      const isGlobal = c.target == null;
-      const badge = el("span", { class: "dr-badge" + (isGlobal ? " dr-global" : ""), text: isGlobal ? "◇" : String(numberOf(c.target)) });
-      const chip = el("span", { class: "dr-chip", text: isGlobal ? "Whole diagram" : c.target });
-      const del = el("button", { class: "dr-del", type: "button", title: "Delete", "aria-label": "Delete comment", text: "×",
-        onClick: (e) => { e.stopPropagation(); removeComment(c); } });
-      const ta = el("textarea", { class: "dr-card-input", rows: "1", "aria-label": "Comment text" });
-      ta.value = c.text;
-      ta.addEventListener("input", () => { c.text = ta.value; autoGrow(ta); });
-      ta.addEventListener("blur", () => { if (!ta.value.trim()) removeComment(c); });
-      const card = el("div", { class: "dr-card", role: "listitem",
-        onMouseenter: () => setActive(c.target, true), onMouseleave: () => setActive(c.target, false) },
-        el("div", { class: "dr-card-top" }, badge, chip, del),
+    function showEdit(item, pinEl) {
+      popMode = "edit"; popItem = item; popPin = pinEl;
+      const ta = el("textarea", { class: "dr-pop-input", rows: "1", placeholder: "Add a comment…", "aria-label": "Element comment" });
+      ta.value = item.text;
+      ta.addEventListener("input", () => { item.text = ta.value; autoGrow(ta); renderList(); updatePreview(); });
+      ta.addEventListener("blur", () => { if (!String(item.text).trim()) deleteItem(item); });
+      ta.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); ta.blur(); hidePop(); } });
+      const del = el("button", { class: "dr-pop-del", type: "button", text: "Delete",
+        onClick: (e) => { e.stopPropagation(); deleteItem(item); } });
+      popBody.replaceChildren(
+        el("div", { class: "dr-pop-top" }, el("span", { class: "dr-badge", text: String(numberOf(item.target)) }), el("span", { class: "dr-pop-chip", text: item.target }), del),
         ta,
       );
-      card.dataset.cid = String(c.id);
-      card.dataset.target = isGlobal ? "" : c.target;
-      return card;
+      pop.hidden = false; placePop(pinEl);
+      ta.focus(); const len = ta.value.length; ta.setSelectionRange(len, len); autoGrow(ta);
     }
 
-    function draftCard(prevValue) {
-      const badge = el("span", { class: "dr-badge dr-global", text: "+" });
-      const chip = el("span", { class: "dr-chip", text: "Whole diagram" });
-      const ta = el("textarea", { class: "dr-card-input", rows: "1", placeholder: "Comment on the whole diagram…", "aria-label": "New whole-diagram comment" });
-      if (prevValue) ta.value = prevValue;
-      ta.addEventListener("input", () => autoGrow(ta));
-      ta.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitDraft(ta.value); }
-        else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); commitDraft(ta.value); }
-      });
-      ta.addEventListener("blur", () => { if (ta.value.trim()) commitDraft(ta.value); });
-      const card = el("div", { class: "dr-card dr-draft" }, el("div", { class: "dr-card-top" }, badge, chip), ta);
-      card.dataset.draft = "1";
-      return card;
+    function addOrEditElement(target) {
+      let item = items.find((i) => i.target === target);
+      if (!item) { item = { id: ++seq, target, text: "" }; items.push(item); renderList(); renderPins(); }
+      const pin = document.querySelector(`.dr-pin[data-target="${CSS.escape(target)}"]`);
+      if (pin) showEdit(item, pin);
+    }
+    function deleteItem(item) {
+      const i = items.indexOf(item);
+      if (i >= 0) items.splice(i, 1);
+      hidePop(); renderList(); renderPins(); updatePreview();
     }
 
-    function render() {
-      // preserve in-progress draft text + focus across re-render
-      const prevDraftEl = listEl.querySelector('[data-draft="1"] .dr-card-input');
-      const prevDraftVal = prevDraftEl ? prevDraftEl.value : "";
-      const draftWasFocused = prevDraftEl && document.activeElement === prevDraftEl;
+    function setActive(target, on) {
+      const node = document.querySelector(`[data-id="${CSS.escape(target)}"]`);
+      if (node) node.classList.toggle("dr-active", on);
+      const pin = document.querySelector(`.dr-pin[data-target="${CSS.escape(target)}"]`);
+      if (pin) pin.classList.toggle("dr-active", on);
+    }
 
-      const order = pinOrder();
-      const numberOf = (t) => order.indexOf(t) + 1;
-
+    function renderList() {
       listEl.replaceChildren();
-      if (!comments.length) {
+      if (!items.length) {
         listEl.append(el("div", { class: "dr-empty" },
-          el("div", { class: "dr-empty-title", text: "No comments yet" }),
-          el("div", { class: "dr-empty-body", text: "Click any element to comment on it, or type below to comment on the whole diagram." }),
-        ));
+          el("div", { class: "dr-empty-title", text: "No element comments" }),
+          el("div", { class: "dr-empty-body", text: "Click any element in the diagram to drop a pin and comment on it." })));
       } else {
-        for (const c of comments) listEl.append(commentCard(c, numberOf));
+        items.forEach((item, i) => {
+          const txt = String(item.text).trim();
+          const row = el("div", { class: "dr-row", role: "listitem",
+            onMouseenter: () => setActive(item.target, true), onMouseleave: () => setActive(item.target, false),
+            onClick: () => {
+              if (collapsed) setCollapsed(false);
+              const node = document.querySelector(`[data-id="${CSS.escape(item.target)}"]`);
+              if (node) node.scrollIntoView({ block: "center", behavior: "smooth" });
+              setTimeout(() => { const pin = document.querySelector(`.dr-pin[data-target="${CSS.escape(item.target)}"]`); if (pin) showEdit(item, pin); }, 280);
+            } },
+            el("span", { class: "dr-badge", text: String(i + 1) }),
+            el("div", { class: "dr-row-text" },
+              el("div", { class: "dr-chip", text: item.target }),
+              el("div", { class: "dr-row-snippet" + (txt ? "" : " dr-faint"), text: txt || "No comment yet" })),
+          );
+          listEl.append(row);
+        });
       }
-      const draft = draftCard(draftWasFocused ? prevDraftVal : "");
-      listEl.append(draft);
-
-      // counter + copy state
-      const n = comments.filter((c) => String(c.text).trim()).length;
-      sub.textContent = n ? `${n} ${plural(n)}` : "Click an element, or type below";
+      listCount.textContent = items.length ? String(items.length) : "";
+      const n = liveCount();
       copyBtn.disabled = n === 0;
       launcherCount.textContent = n ? String(n) : "";
+    }
 
-      // element markers
-      const commented = new Set(order);
-      for (const node of document.querySelectorAll("[data-id]"))
-        node.classList.toggle("dr-commented", commented.has(node.getAttribute("data-id")));
-
-      // pins
+    function renderPins() {
       for (const p of document.querySelectorAll(".dr-pin")) p.remove();
-      order.forEach((target, i) => {
+      items.forEach((item, i) => {
         const pin = el("button", { class: "dr-pin", type: "button", text: String(i + 1),
-          onMouseenter: () => setActive(target, true), onMouseleave: () => setActive(target, false),
-          onClick: (e) => { e.stopPropagation(); if (collapsed) setCollapsed(false); focusCard(target); } });
-        pin.dataset.target = target;
+          onMouseenter: () => { clearTimeout(hideTimer); setActive(item.target, true); showRead(item, pin); },
+          onMouseleave: () => { setActive(item.target, false); if (popMode === "read") scheduleHide(); },
+          onClick: (e) => { e.stopPropagation(); showEdit(item, pin); } });
+        pin.dataset.target = item.target;
         document.body.append(pin);
       });
+      // persistent markers on commented elements
+      const commented = new Set(items.map((i) => i.target));
+      for (const node of document.querySelectorAll("[data-id]"))
+        node.classList.toggle("dr-commented", commented.has(node.getAttribute("data-id")));
       layoutPins();
-
-      // restore focus
-      if (pendingFocus && pendingFocus.id != null) {
-        const ta = listEl.querySelector(`[data-cid="${pendingFocus.id}"] .dr-card-input`);
-        if (ta) { ta.focus(); }
-      } else if ((pendingFocus && pendingFocus.draft) || draftWasFocused) {
-        const ta = draft.querySelector(".dr-card-input");
-        if (ta) { ta.focus(); const len = ta.value.length; ta.setSelectionRange(len, len); }
-      }
-      pendingFocus = null;
-      for (const ta of listEl.querySelectorAll(".dr-card-input")) autoGrow(ta);
     }
 
     function layoutPins() {
@@ -312,6 +324,7 @@
         pin.style.left = (r.right + sx) + "px";
         pin.style.top = (r.top + sy) + "px";
       }
+      if (!pop.hidden && popPin) placePop(popPin);
     }
     function animatePins() {
       let start = null;
@@ -319,28 +332,20 @@
       requestAnimationFrame(step);
     }
 
-    function focusCard(target) {
-      for (const card of listEl.querySelectorAll(".dr-card")) {
-        if (card.dataset.target === target) {
-          card.scrollIntoView({ block: "nearest", behavior: "smooth" });
-          card.animate([{ background: "color-mix(in srgb, var(--dr-accent) 16%, transparent)" }, { background: "transparent" }],
-            { duration: 900, easing: "ease-out" });
-          break;
-        }
-      }
-    }
-
     function setCollapsed(v) {
       collapsed = v;
       sidebar.classList.toggle("dr-collapsed", v);
       document.body.classList.toggle("dr-collapsed", v);
       launcher.hidden = !v;
+      if (v) hidePop();
       animatePins();
     }
 
-    async function copyForClaude() {
-      const text = buildFeedbackMarkdown(meta, comments);
-      try { await navigator.clipboard.writeText(text); flash("Copied ✓ — paste into your Claude chat"); }
+    function updatePreview() { previewPre.textContent = buildFeedbackMarkdown(meta, overall, items); }
+
+    async function copyFeedback() {
+      const text = buildFeedbackMarkdown(meta, overall, items);
+      try { await navigator.clipboard.writeText(text); flash("Copied ✓ — paste it to your AI agent"); }
       catch { showFallback(text); }
     }
     function flash(msg) {
@@ -350,36 +355,53 @@
       setTimeout(() => { t.classList.remove("dr-show"); setTimeout(() => t.remove(), 250); }, 2400);
     }
     function showFallback(text) {
-      const ta = el("textarea", { class: "dr-modal-text", rows: "10", readonly: "", "aria-label": "Feedback to copy" });
+      const ta = el("textarea", { class: "dr-pop-input", rows: "10", readonly: "", "aria-label": "Feedback to copy" });
       ta.value = text;
       const close = el("button", { class: "dr-btn", type: "button", text: "Close" });
-      const modal = el("div", { class: "dr-modal" },
-        el("div", { class: "dr-modal-box" },
-          el("p", { text: "Copy manually (Ctrl/⌘ + C), then paste into your Claude chat:" }),
-          ta,
-          el("div", { class: "dr-modal-actions" }, close),
-        ),
-      );
+      const box = el("div", {});
+      box.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,92vw);" +
+        "background:var(--dr-bg);color:var(--dr-text);border:1px solid var(--dr-border-strong);border-radius:14px;" +
+        "box-shadow:var(--dr-shadow-pop);padding:16px";
+      box.append(el("div", { class: "dr-label", text: "Copy manually (Ctrl/⌘ + C)" }), ta, el("div", { style: "margin-top:10px" }, close));
+      const modal = el("div", {}, box);
+      modal.style.cssText = "position:fixed;inset:0;background:rgba(9,9,11,.45);z-index:2147483647";
+      box.addEventListener("click", (e) => e.stopPropagation());
       close.addEventListener("click", () => modal.remove());
-      modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+      modal.addEventListener("click", () => modal.remove());
       document.body.append(modal);
       ta.focus(); ta.select();
     }
 
     // --- wire up ---
+    overallInput.addEventListener("input", () => { overall = overallInput.value; autoGrow(overallInput); renderList(); updatePreview(); });
+    overallInput.addEventListener("focus", hidePop);
     collapseBtn.addEventListener("click", (e) => { e.stopPropagation(); setCollapsed(true); });
     launcher.addEventListener("click", (e) => { e.stopPropagation(); setCollapsed(false); });
-    copyBtn.addEventListener("click", copyForClaude);
+    copyBtn.addEventListener("click", copyFeedback);
+
+    let previewTimer = null;
+    const showPreview = () => { if (copyBtn.disabled) return; updatePreview(); previewPop.hidden = false; };
+    const hidePreviewSoon = () => { clearTimeout(previewTimer); previewTimer = setTimeout(() => { previewPop.hidden = true; }, 160); };
+    copyBtn.addEventListener("mouseenter", showPreview);
+    copyBtn.addEventListener("mouseleave", hidePreviewSoon);
+    copyBtn.addEventListener("focus", showPreview);
+    copyBtn.addEventListener("blur", hidePreviewSoon);
+    previewPop.addEventListener("mouseenter", () => clearTimeout(previewTimer));
+    previewPop.addEventListener("mouseleave", hidePreviewSoon);
+
+    document.addEventListener("click", () => { if (popMode) hidePop(); });
     window.addEventListener("resize", layoutPins);
     window.addEventListener("scroll", layoutPins, { passive: true });
 
     for (const node of document.querySelectorAll("[data-id]")) {
       node.classList.add("dr-target");
-      node.addEventListener("click", (e) => { e.stopPropagation(); if (collapsed) setCollapsed(false); addElementComment(node.getAttribute("data-id")); });
+      node.addEventListener("click", (e) => { e.stopPropagation(); if (collapsed) setCollapsed(false); addOrEditElement(node.getAttribute("data-id")); });
     }
 
-    document.body.append(sidebar, launcher);
-    render();
+    document.body.append(sidebar, launcher, pop);
+    renderList();
+    renderPins();
+    updatePreview();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
