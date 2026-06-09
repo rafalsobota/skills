@@ -32,26 +32,36 @@ buildu, zero hostingu, zero procesów w tle, zero sieci.
 
 ## Architektura
 
-Skill o nazwie **`diagram-review`** — katalog zawierający tylko **dwa pliki**:
+Skill o nazwie **`diagram-review`** — katalog zawierający **trzy pliki**:
 
 | Plik | Rola |
 |------|------|
-| `template.html` | **Samowystarczalny szkielet** — CSS i JS nakładki już wbudowane inline. Placeholdery: `{{VERSION}}`, `{{FILE}}` i slot na SVG (`<!-- SVG -->`). |
+| `template.html` | Malutki szkielet HTML: placeholdery `{{VERSION}}`, `{{FILE}}`, slot na SVG (`<!-- SVG -->`) i jeden `<script src="overlay.js">`. |
+| `overlay.js` | **Współdzielona nakładka** — CSS + JS w jednym pliku (klasyczny skrypt w IIFE). Kopiowany raz do folderu docelowego, referowany przez każdy `diagram-vN.html`. |
 | `SKILL.md` | Instrukcja dla Claude: jak generować SVG, jak wypełnić szablon, gdzie zapisać plik, że robi `open`, jak czytać wklejony feedback. |
 
-Wygenerowany artefakt to **pojedynczy, samowystarczalny plik `.html`** (SVG +
-nakładka + metadane w jednym pliku). Otwiera się w dowolnej przeglądarce,
-działa offline, bez CDN, bez CORS, bez supply-chain.
+**Dlaczego osobny `overlay.js`, a nie inline:** przy wielu wersjach (np. 100
+diagramów) inline'owana nakładka duplikowałaby ~10 KB w każdym pliku. Współdzielony
+`overlay.js` (kopiowany raz do folderu) sprawia, że każdy `diagram-vN.html` to
+tylko mały SVG (~1 KB), a aktualizacja nakładki odświeża wszystkie diagramy naraz.
 
-Składanie pliku jest trywialne i bez buildu: Claude kopiuje `template.html` i
-podmienia trzy placeholdery (`cp` + Edit), nie re-emitując statycznego CSS/JS.
-Dlatego **nie ma osobnego `overlay.js` ani kroku „assemble"** — cała nakładka
-żyje w `template.html`.
+**Świadomy trade-off:** pojedynczy HTML **nie jest** samowystarczalny — jest ważny
+tylko obok `overlay.js` w tym samym folderze. Przy efemerycznych plikach w temp to
+bez znaczenia.
+
+**Klasyczny skrypt, nie moduł:** `overlay.js` ładowany jako `<script src>` (nie
+`type="module"`), bo moduły ES są blokowane przez CORS na `file://`; klasyczne
+skrypty z tego samego folderu — nie. Kod jest opakowany w IIFE, bez `import/export`.
+
+Składanie pliku jest trywialne i bez buildu: Claude kopiuje `template.html`,
+podmienia trzy placeholdery (`cp` + Edit) i kopiuje `overlay.js` do folderu —
+nie re-emitując statycznego CSS/JS.
 
 ## Przepływ end-to-end
 
 ```
 Claude generuje SVG (elementy commentowalne mają atrybut data-id)
+   → kopiuje overlay.js do folderu docelowego (raz, idempotentnie)
    → wybiera numer wersji N (max istniejących w katalogu + 1)
    → kopiuje template.html i podmienia placeholdery: {{VERSION}}, {{FILE}}, <!-- SVG -->
    → zapisuje plik diagram-vN.html w domyślnej lokalizacji
@@ -105,14 +115,14 @@ przez Claude przy generacji:
 <script>window.diagramMeta = { version: "{{VERSION}}", file: "{{FILE}}" };</script>
 ```
 
-Niżej w tym samym pliku siedzi inline `<style>` (CSS nakładki) oraz
-`<script type="module">` budujący nakładkę. Po załadowaniu skrypt odczytuje
+Niżej w `<body>` jest slot na SVG i pojedynczy `<script src="overlay.js">`. Cały
+CSS i logika żyją w `overlay.js`; po załadowaniu skrypt odczytuje
 `window.diagramMeta`, żeby wstawić poprawny nagłówek do kopiowanego tekstu.
 
-## Zachowanie nakładki (inline w `template.html`)
+## Zachowanie nakładki (`overlay.js`)
 
-1. Po załadowaniu modułu: skanuje `[data-id]`, dorzuca do każdego elementu
-   hover-highlight oraz handler kliknięcia. UI budowane przez
+1. Po załadowaniu skryptu: wstrzykuje `<style>`, skanuje `[data-id]`, dorzuca do
+   każdego elementu hover-highlight oraz handler kliknięcia. UI budowane przez
    `createElement`/`textContent` (bez `innerHTML` na danych użytkownika).
 2. Klik w element → popover przy elemencie z `<textarea>` i przyciskiem „Dodaj".
    „Dodaj" dopisuje komentarz `{ target: <data-id>, text }` do tablicy w pamięci.
