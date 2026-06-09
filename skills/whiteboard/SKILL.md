@@ -58,17 +58,17 @@ Let `SKILL_DIR` be this skill's own directory (where `template.html` and
    OUT="$OUTDIR/$NAME.html"
    ```
 
-3. **Build the file from the template.** Copy the template, then fill the three
-   slots. Do NOT retype the overlay — it is the separate `overlay.js`:
+3. **Build the file from the template.** Copy the template, then fill its single
+   slot. Do NOT retype the overlay — it is the separate `overlay.js`:
 
    ```bash
    cp "$SKILL_DIR/template.html" "$OUT"
    ```
 
-   Then use Edit on `$OUT`:
-   - replace both `{{VERSION}}` with `$NAME` (replace_all),
-   - replace `{{FILE}}` with `$NAME.html`,
-   - replace the single line `<!-- SVG -->` with the full SVG markup.
+   Then use Edit on `$OUT` to replace the single line `<!-- SVG -->` with the full
+   SVG markup. That's the only edit — the diagram name (used in the page title and
+   the feedback header) is derived at runtime from the file's own name, so the
+   filename you chose in step 2 IS the name; there are no placeholders to fill.
 
    The `<script src="overlay.js">` in the template resolves next to the HTML, where
    step 2 copied `overlay.js`.

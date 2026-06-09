@@ -258,7 +258,11 @@
   }
 
   function init() {
-    const meta = window.diagramMeta || { version: "v?", file: "" };
+    // Derive the diagram name from the file itself — single source of truth.
+    const file = decodeURIComponent((location.pathname.split("/").pop() || "").trim());
+    const version = file.replace(/\.html$/i, "") || "v?";
+    const meta = { version, file };
+    document.title = version;
     let seq = 0, overall = "", openItem = null;
     const items = [];
 
