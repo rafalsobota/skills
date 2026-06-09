@@ -127,16 +127,21 @@ review (Figma comments / Linear). UI budowane przez `createElement`/`textContent
 
 1. Po załadowaniu skryptu: wstrzykuje `<style>`, skanuje `[data-id]`, dorzuca do
    każdego elementu hover-highlight oraz handler kliknięcia.
-2. **Prawy sidebar** (stały, 340px) — `body { margin-right }` sprawia, że diagram
-   **nigdy nie jest zasłaniany** rosnącą listą. Nagłówek (tytuł „Review" + pill
-   wersji + licznik), przewijalna lista kart, stopka z przyciskami.
-3. Klik w element → composer (popover przy elemencie) z `<textarea>` i „Add".
-   Komentarz `{ id, target: <data-id>|null, text }` ląduje w tablicy w pamięci.
+2. **Prawy sidebar = obszar roboczy** (dokowany, 340px) — `body { margin-right }`
+   sprawia, że diagram **nigdy nie jest zasłaniany** rosnącą listą. Nagłówek (tytuł
+   „Review" + pill wersji + chevron zwijania), przewijalna lista kart, stopka z „Copy".
+3. **Ciągła edycja — bez popoverów/modali.** Każdy komentarz to zawsze edytowalna
+   `<textarea>` (autosave na `input`, autogrow). Pusta karta znika na `blur`.
+   Klik w element → od razu nowa edytowalna karta `{ id, target: <data-id>, text }`
+   (focus + scroll). Na dole listy stale czeka pusty draft „Comment on the whole
+   diagram…" (`target: null`); Enter/blur z treścią tworzy kartę, draft się czyści.
 4. **Numerowane piny** na skomentowanych elementach (jak w Figmie), zsynchronizowane
-   z kartami w sidebarze: hover karty podświetla element + pin; klik pinu przewija
+   z kartami: hover karty podświetla element + pin; klik pinu rozwija panel i przewija
    do karty. Piny pozycjonowane wg `getBoundingClientRect`, korygowane na resize/scroll.
-5. Stopka: **„Comment on whole diagram"** (secondary, `target: null`) oraz primary
-   **„Copy for Claude"** — składa Markdown (format niżej) i woła `navigator.clipboard.writeText`.
+5. **Zwijanie panelu.** Chevron chowa sidebar (`translateX`), diagram zajmuje pełną
+   szerokość, a w rogu zostaje pływający pill „Review · N" do rozwinięcia. Piny
+   zostają na diagramie. **„Copy for Claude"** składa Markdown (format niżej,
+   pomijając puste karty) i woła `navigator.clipboard.writeText`.
 
 Stan (lista komentarzy) trzymany wyłącznie w pamięci karty. Brak persystencji
 komentarzy — po skopiowaniu i regeneracji powstaje nowa wersja, nowy plik.
