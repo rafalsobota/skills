@@ -95,7 +95,7 @@
     .dr-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--dr-text-faint); }
     .dr-overall-input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px;
       border: 1px solid var(--dr-border-strong); border-radius: 8px; background: var(--dr-bg-sunken); color: var(--dr-text);
-      font: 400 13px/1.45 system-ui, sans-serif; resize: none; overflow: hidden; min-height: 38px; }
+      font: 400 13px/1.45 system-ui, sans-serif; resize: none; overflow: hidden; min-height: 66px; }
     .dr-overall-input::placeholder { color: var(--dr-text-faint); }
     .dr-overall-input:focus { outline: 2px solid var(--dr-accent); outline-offset: -1px; border-color: transparent; }
 
@@ -103,6 +103,7 @@
     .dr-list { flex: 1; overflow: auto; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px; }
     .dr-row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px; border-radius: 9px; cursor: pointer; border: 1px solid transparent; }
     .dr-row:hover { background: var(--dr-bg-sunken); border-color: color-mix(in srgb, var(--dr-accent) 25%, var(--dr-border)); }
+    .dr-row.dr-row-active { background: color-mix(in srgb, var(--dr-accent) 12%, transparent); border-color: color-mix(in srgb, var(--dr-accent) 45%, var(--dr-border)); }
     .dr-row-text { min-width: 0; flex: 1; }
     .dr-chip { font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dr-text-soft);
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -208,15 +209,21 @@
       onClick: (e) => e.stopPropagation() }, popBody);
 
     function scheduleHide() { clearTimeout(hideTimer); hideTimer = setTimeout(hidePop, 180); }
-    function hidePop() { pop.hidden = true; popMode = null; popItem = null; popPin = null; }
+    function hidePop() { pop.hidden = true; popMode = null; popItem = null; popPin = null; clearRows(); }
     function placePop(pinEl) {
-      const r = pinEl.getBoundingClientRect();
-      const w = 280;
-      let left = r.left - w - 10;
-      if (left < 10) left = Math.min(r.right + 10, window.innerWidth - w - 10);
-      const top = Math.min(Math.max(10, r.top), window.innerHeight - 160);
-      pop.style.left = Math.max(10, left) + "px";
-      pop.style.top = top + "px";
+      const w = 280, gap = 12, h = pop.offsetHeight || 140;
+      const node = document.querySelector(`[data-id="${CSS.escape(pinEl.dataset.target)}"]`);
+      const rect = node ? node.getBoundingClientRect() : pinEl.getBoundingClientRect();
+      const sidebarLeft = collapsed ? window.innerWidth : window.innerWidth - 340;
+      let left, top;
+      if (rect.left - gap - w >= 10) { left = rect.left - gap - w; top = rect.top; }            // left of node
+      else if (rect.right + gap + w <= sidebarLeft - 10) { left = rect.right + gap; top = rect.top; } // right of node
+      else { // tight: place below (or above) the node so it never covers it
+        left = Math.max(10, Math.min(rect.left, sidebarLeft - w - 10));
+        top = (rect.bottom + gap + h <= window.innerHeight - 10) ? rect.bottom + gap : rect.top - gap - h;
+      }
+      pop.style.left = left + "px";
+      pop.style.top = Math.min(Math.max(10, top), window.innerHeight - h - 10) + "px";
     }
 
     function showRead(item, pinEl) {
@@ -228,6 +235,7 @@
         el("div", { class: "dr-pop-read" + (txt ? "" : " dr-faint"), text: txt || "Empty — click to add a comment" }),
       );
       pop.hidden = false; placePop(pinEl);
+      activateRow(item.target, false);
     }
 
     function showEdit(item, pinEl) {
@@ -245,6 +253,7 @@
       );
       pop.hidden = false; placePop(pinEl);
       ta.focus(); const len = ta.value.length; ta.setSelectionRange(len, len); autoGrow(ta);
+      activateRow(item.target, true);
     }
 
     function addOrEditElement(target) {
@@ -265,6 +274,14 @@
       const pin = document.querySelector(`.dr-pin[data-target="${CSS.escape(target)}"]`);
       if (pin) pin.classList.toggle("dr-active", on);
     }
+    function activateRow(target, scroll) {
+      for (const row of listEl.querySelectorAll(".dr-row")) {
+        const on = row.dataset.target === target;
+        row.classList.toggle("dr-row-active", on);
+        if (on && scroll) row.scrollIntoView({ block: "nearest" });
+      }
+    }
+    function clearRows() { for (const row of listEl.querySelectorAll(".dr-row-active")) row.classList.remove("dr-row-active"); }
 
     function renderList() {
       listEl.replaceChildren();
@@ -288,6 +305,7 @@
               el("div", { class: "dr-chip", text: item.target }),
               el("div", { class: "dr-row-snippet" + (txt ? "" : " dr-faint"), text: txt || "No comment yet" })),
           );
+          row.dataset.target = item.target;
           listEl.append(row);
         });
       }
@@ -295,6 +313,7 @@
       const n = liveCount();
       copyBtn.disabled = n === 0;
       launcherCount.textContent = n ? String(n) : "";
+      if (popItem) activateRow(popItem.target, false); // keep highlight across re-renders
     }
 
     function renderPins() {
